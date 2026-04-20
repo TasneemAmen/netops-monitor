@@ -1,0 +1,14 @@
+# Generated at runtime — never commit
+db_password.txt
+bootstrap.log
+.compose.run.yml
+.compose.nginx.yml
+docker-compose.override.yml
+
+# Persistent DB volume (local dev only)
+db/data/
+
+# Editor
+.vscode/
+.idea/
+*.swp

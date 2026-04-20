@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetOps Monitor — NOC Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  background:#080c18;
+  color:#b8ccd8;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  min-height:100vh;
+  font-size:14px;
+}
+
+/* ── Header ── */
+header{
+  background:#0c1020;
+  border-bottom:1px solid #192338;
+  padding:0 28px;
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;top:0;z-index:10;
+}
+.brand{display:flex;align-items:center;gap:14px}
+.brand-icon{
+  width:38px;height:38px;
+  background:linear-gradient(135deg,#0099cc,#005f99);
+  border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+  box-shadow:0 0 16px #0099cc30;
+}
+.brand-text h1{font-size:16px;font-weight:600;color:#d8eaf8;letter-spacing:.4px}
+.brand-text p {font-size:11px;color:#3a5570;margin-top:1px}
+
+.header-right{display:flex;align-items:center;gap:18px}
+#last-update{font-size:12px;color:#3a5570}
+.live{
+  display:flex;align-items:center;gap:7px;
+  background:#00cc5510;border:1px solid #00cc5540;
+  color:#00cc55;font-size:11px;font-weight:700;
+  padding:4px 12px;border-radius:20px;letter-spacing:1px;
+}
+.live-dot{
+  width:7px;height:7px;background:#00cc55;border-radius:50%;
+  animation:blink 1.6s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 0 0 #00cc5560}
+  50%{opacity:.4;box-shadow:0 0 0 4px #00cc5500}}
+
+/* ── Main ── */
+main{padding:24px 28px;max-width:1400px;margin:0 auto}
+
+/* ── Stat cards ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.card{
+  background:#0c1020;
+  border:1px solid #192338;
+  border-radius:10px;padding:20px 22px;
+  position:relative;overflow:hidden;
+}
+.card::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+}
+.card.c-blue::after  {background:linear-gradient(90deg,#0099cc,#00ccff)}
+.card.c-green::after {background:linear-gradient(90deg,#00aa44,#00dd66)}
+.card.c-red::after   {background:linear-gradient(90deg,#cc2200,#ff4422)}
+.card.c-amber::after {background:linear-gradient(90deg,#cc8800,#ffaa00)}
+
+.card-label{font-size:11px;color:#3a5570;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px}
+.card-value{font-size:34px;font-weight:700;color:#d8eaf8;line-height:1;margin-bottom:5px}
+.card-sub  {font-size:11px;color:#3a5570}
+.card-bg{
+  position:absolute;right:16px;top:50%;transform:translateY(-50%);
+  font-size:38px;opacity:.06;pointer-events:none;
+}
+
+/* ── Grid ── */
+.grid{display:grid;grid-template-columns:1fr 360px;gap:14px}
+
+/* ── Panels ── */
+.panel{background:#0c1020;border:1px solid #192338;border-radius:10px;overflow:hidden}
+.panel-head{
+  padding:13px 20px;border-bottom:1px solid #111d30;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.panel-title{font-size:11px;font-weight:600;color:#7090a8;text-transform:uppercase;letter-spacing:1.1px}
+.badge{
+  font-size:11px;background:#111d30;
+  padding:2px 9px;border-radius:10px;color:#3a5570;
+}
+
+/* ── Table ── */
+table{width:100%;border-collapse:collapse}
+th{
+  font-size:10px;color:#3a5570;text-transform:uppercase;
+  letter-spacing:.9px;padding:10px 18px;text-align:left;
+  border-bottom:1px solid #111d30;font-weight:500;
+}
+td{
+  padding:11px 18px;border-bottom:1px solid #0c1528;
+  color:#a8bec8;font-size:13px;
+  transition:background .15s;
+}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#0e1830}
+
+.nid{font-family:'Courier New',monospace;font-size:12px;color:#00aadd;font-weight:700}
+
+.ntype{
+  font-size:10px;padding:2px 8px;border-radius:4px;
+  font-weight:700;letter-spacing:.5px;display:inline-block;
+}
+.t-bts {background:#00559920;color:#00aadd;border:1px solid #00559940}
+.t-bsc {background:#66009920;color:#bb88ff;border:1px solid #66009940}
+.t-msc {background:#995500 20;color:#ddaa44;border:1px solid #99550040}
+.t-ggsn{background:#00663320;color:#44cc88;border:1px solid #00663340}
+.t-hlr {background:#880000 20;color:#ee6666;border:1px solid #88000040}
+.t-sgsn{background:#00336620;color:#6699dd;border:1px solid #00336640}
+
+.st{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;
+}
+.st-up  {background:#00aa4415;color:#00cc55;border:1px solid #00aa4430}
+.st-down{background:#cc220015;color:#ff4422;border:1px solid #cc220030}
+.st-warn{background:#cc880015;color:#ffaa00;border:1px solid #cc880030}
+.st-dot {width:5px;height:5px;border-radius:50%;background:currentColor}
+.st-up .st-dot{animation:blink 2s infinite}
+
+.bar-wrap{display:flex;align-items:center;gap:8px}
+.bar{flex:1;height:4px;background:#111d30;border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;transition:width .6s}
+.bar-low {background:#00cc55}
+.bar-mid {background:#ffaa00}
+.bar-hi  {background:#ff4422}
+.bar-pct {font-size:11px;color:#3a5570;min-width:28px;text-align:right}
+
+/* ── Alarms ── */
+.alarm{
+  padding:14px 18px;border-bottom:1px solid #0c1528;
+  border-left:3px solid transparent;
+}
+.alarm:last-child{border-bottom:none}
+.alarm.critical{border-left-color:#ff4422}
+.alarm.warning {border-left-color:#ffaa00}
+.alarm.info    {border-left-color:#00aadd}
+
+.alarm-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.alarm-code{font-family:'Courier New',monospace;font-size:11px;color:#3a5570}
+.sev{font-size:10px;font-weight:700;letter-spacing:.9px;padding:2px 7px;border-radius:3px}
+.sev-critical{background:#ff442220;color:#ff4422}
+.sev-warning {background:#ffaa0020;color:#ffaa00}
+.sev-info    {background:#00aadd20;color:#00aadd}
+.alarm-desc  {font-size:13px;color:#8aa0b0;line-height:1.45;margin-bottom:4px}
+.alarm-meta  {font-size:11px;color:#2a3f55}
+
+.empty{padding:40px 18px;text-align:center;color:#2a3f55;font-size:13px}
+.loading-msg{padding:28px 18px;text-align:center;color:#2a3f55;font-size:13px}
+
+/* ── Footer ── */
+footer{
+  text-align:center;padding:22px;
+  font-size:11px;color:#1e3048;margin-top:20px;line-height:1.8;
+}
+
+@media(max-width:900px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon">📡</div>
+    <div class="brand-text">
+      <h1>NetOps Monitor</h1>
+      <p>Network Operations Center — Live Dashboard</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span id="last-update"></span>
+    <div class="live"><div class="live-dot"></div>LIVE</div>
+  </div>
+</header>
+
+<main>
+
+  <div class="stats">
+    <div class="card c-blue">
+      <div class="card-label">Total Nodes</div>
+      <div class="card-value" id="s-total">—</div>
+      <div class="card-sub">Network elements</div>
+      <div class="card-bg">🗼</div>
+    </div>
+    <div class="card c-green">
+      <div class="card-label">Online</div>
+      <div class="card-value" id="s-online">—</div>
+      <div class="card-sub" id="s-online-sub">—</div>
+      <div class="card-bg">✅</div>
+    </div>
+    <div class="card c-red">
+      <div class="card-label">Active Alarms</div>
+      <div class="card-value" id="s-alarms">—</div>
+      <div class="card-sub">Requires attention</div>
+      <div class="card-bg">🚨</div>
+    </div>
+    <div class="card c-amber">
+      <div class="card-label">Network Uptime</div>
+      <div class="card-value" id="s-pct">—</div>
+      <div class="card-sub">Node availability</div>
+      <div class="card-bg">📊</div>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Network Elements</span>
+        <span class="badge" id="node-badge">loading</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Node ID</th><th>Type</th><th>Location</th>
+            <th>Status</th><th>Load</th>
+          </tr>
+        </thead>
+        <tbody id="node-tbody">
+          <tr><td colspan="5" class="loading-msg">Fetching network elements…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">Active Alarms</span>
+        <span class="badge" id="alarm-badge">loading</span>
+      </div>
+      <div id="alarm-body">
+        <div class="loading-msg">Fetching alarms…</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  NetOps Monitor v1.0 &nbsp;·&nbsp;
+  Containerized with Docker &nbsp;·&nbsp;
+  Secrets via HashiCorp Vault &nbsp;·&nbsp;
+  Read-only containers &nbsp;·&nbsp;
+  Local registry
+</footer>
+
+<script>
+const API = 'http://'+location.hostname+':5001';
+
+const typeClass = t => ({BTS:'t-bts',BSC:'t-bsc',MSC:'t-msc',
+  GGSN:'t-ggsn',HLR:'t-hlr',SGSN:'t-sgsn'}[t]||'t-bts');
+
+const loadClass = p => p < 60 ? 'bar-low' : p < 80 ? 'bar-mid' : 'bar-hi';
+
+async function api(path) {
+  const r = await fetch(API + path, {signal: AbortSignal.timeout(5000)});
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function loadStats() {
+  try {
+    const d = await api('/api/stats');
+    document.getElementById('s-total').textContent  = d.total_nodes;
+    document.getElementById('s-online').textContent = d.online_nodes;
+    document.getElementById('s-alarms').textContent = d.active_alarms;
+    document.getElementById('s-pct').textContent    = d.uptime_pct + '%';
+    document.getElementById('s-online-sub').textContent =
+      d.online_nodes + ' of ' + d.total_nodes + ' nodes';
+  } catch { ['s-total','s-online','s-alarms','s-pct'].forEach(id =>
+    { document.getElementById(id).textContent = '—'; }); }
+}
+
+async function loadNodes() {
+  const tbody = document.getElementById('node-tbody');
+  try {
+    const nodes = await api('/api/nodes');
+    document.getElementById('node-badge').textContent = nodes.length + ' nodes';
+    if (!nodes.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">No nodes found</td></tr>';
+      return;
+    }
+    tbody.innerHTML = nodes.map(n => {
+      const pct = n.load_pct || 0;
+      const sc = n.status === 'UP' ? 'st-up' : n.status === 'WARN' ? 'st-warn' : 'st-down';
+      const loadHtml = n.status === 'DOWN' ? '<span style="color:#2a3f55">—</span>' :
+        `<div class="bar-wrap"><div class="bar"><div class="bar-fill ${loadClass(pct)}"
+        style="width:${pct}%"></div></div><span class="bar-pct">${pct}%</span></div>`;
+      return `<tr>
+        <td><span class="nid">${n.node_id}</span></td>
+        <td><span class="ntype ${typeClass(n.node_type)}">${n.node_type}</span></td>
+        <td>${n.location}</td>
+        <td><span class="st ${sc}"><span class="st-dot"></span>${n.status}</span></td>
+        <td>${loadHtml}</td>
+      </tr>`;
+    }).join('');
+  } catch {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Backend unavailable</td></tr>';
+    document.getElementById('node-badge').textContent = 'offline';
+  }
+}
+
+async function loadAlarms() {
+  const body = document.getElementById('alarm-body');
+  try {
+    const alarms = await api('/api/alarms');
+    document.getElementById('alarm-badge').textContent = alarms.length + ' active';
+    if (!alarms.length) {
+      body.innerHTML = '<div class="empty">✓ No active alarms</div>';
+      return;
+    }
+    body.innerHTML = alarms.map(a => {
+      const sev = (a.severity||'INFO').toLowerCase();
+      const sc = sev === 'critical' ? 'sev-critical' : sev === 'warning' ? 'sev-warning' : 'sev-info';
+      const ts = a.raised_at ? new Date(a.raised_at).toLocaleString() : '—';
+      return `<div class="alarm ${sev}">
+        <div class="alarm-top">
+          <span class="alarm-code">${a.alarm_code}</span>
+          <span class="sev ${sc}">${a.severity}</span>
+        </div>
+        <div class="alarm-desc">${a.description}</div>
+        <div class="alarm-meta">${a.node_id} · ${ts}</div>
+      </div>`;
+    }).join('');
+  } catch {
+    body.innerHTML = '<div class="empty">Backend unavailable</div>';
+    document.getElementById('alarm-badge').textContent = 'offline';
+  }
+}
+
+async function refresh() {
+  await Promise.all([loadStats(), loadNodes(), loadAlarms()]);
+  document.getElementById('last-update').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

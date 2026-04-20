@@ -1,0 +1,58 @@
+services:
+
+  frontend:
+    image: localhost:5000/frontend-secure:v1
+    ports:
+      - "8080:80"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: localhost:5000/backend-secure:v1
+    ports:
+      - "5000:5000"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    secrets:
+      - db_password
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_NAME=netops
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.6
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/db_password
+      - MARIADB_DATABASE=netops
+    secrets:
+      - db_password
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+secrets:
+  db_password:
+    file: ./db_password.txt
+
+volumes:
+  dbdata:
