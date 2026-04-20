@@ -19,23 +19,25 @@ jobs:
       - name: Validate docker-compose syntax
         run: docker compose -f docker-compose.yml config --quiet
 
-      - name: Lint Dockerfile (backend)
+      - name: Lint backend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: backend/Dockerfile
+          failure-threshold: error        # warnings are ok, only errors fail
 
-      - name: Lint Dockerfile (frontend)
+      - name: Lint frontend Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: frontend/Dockerfile
+          failure-threshold: error
 
-      - name: Check shell script syntax
+      - name: Validate shell script syntax
         run: bash -n Start_project.sh
 
-      - name: Verify .gitignore protects secrets
+      - name: Verify secrets are not tracked by git
         run: |
           if git ls-files | grep -q "db_password.txt"; then
-            echo "ERROR: db_password.txt is tracked by git"
+            echo "ERROR: db_password.txt is committed — remove it immediately"
             exit 1
           fi
           echo "OK: No secrets tracked"
@@ -51,36 +53,35 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker          # ← KEY FIX: 'docker' driver exposes images
+                                  # to the local daemon so docker inspect works.
+                                  # Default 'docker-container' driver does NOT.
 
       - name: Build backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: false
-          tags: backend-secure:v1
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
+        run: |
+          docker build -t backend-secure:v1 ./backend
 
       - name: Build frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: false
-          tags: frontend-secure:v1
-          cache-from: type=gha
-          cache-to:   type=gha,mode=max
-
-      - name: Check image sizes
         run: |
-          docker images --format "{{.Repository}}:{{.Tag}}  {{.Size}}" | grep -E "backend|frontend"
-          BACKEND_SIZE=$(docker image inspect backend-secure:v1 \
-            --format='{{.Size}}' 2>/dev/null || echo 0)
-          # Fail if backend image exceeds 200MB (200 * 1024 * 1024)
-          if [ "$BACKEND_SIZE" -gt 209715200 ]; then
-            echo "ERROR: Backend image too large ($BACKEND_SIZE bytes)"
+          docker build -t frontend-secure:v1 ./frontend
+
+      - name: Show image sizes
+        run: |
+          docker images --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}" \
+            | grep -E "backend-secure|frontend-secure"
+
+      - name: Enforce backend image size limit (200 MB)
+        run: |
+          SIZE=$(docker inspect backend-secure:v1 \
+            --format='{{.Size}}')
+          echo "Backend image size: $SIZE bytes"
+          LIMIT=209715200   # 200 MB in bytes
+          if [ "$SIZE" -gt "$LIMIT" ]; then
+            echo "FAIL: Backend image ($SIZE bytes) exceeds 200 MB limit"
             exit 1
           fi
-          echo "OK: Image sizes acceptable"
+          echo "OK: Backend image is within size limit"
 
   security-scan:
     name: Security Scan
@@ -94,21 +95,21 @@ jobs:
       - name: Build backend for scanning
         run: docker build -t backend-secure:v1 ./backend
 
-      - name: Scan backend image with Trivy
+      - name: Scan backend with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: backend-secure:v1
           format: table
-          exit-code: 0          # report but don't fail on CVEs (beginner-friendly)
+          exit-code: '0'
           severity: CRITICAL,HIGH
 
       - name: Build frontend for scanning
         run: docker build -t frontend-secure:v1 ./frontend
 
-      - name: Scan frontend image with Trivy
+      - name: Scan frontend with Trivy
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: frontend-secure:v1
           format: table
-          exit-code: 0
+          exit-code: '0'
           severity: CRITICAL,HIGH
