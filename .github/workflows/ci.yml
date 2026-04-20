@@ -1,0 +1,114 @@
+name: CI — Build & Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  lint-and-validate:
+    name: Lint & Static Checks
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose syntax
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Lint Dockerfile (backend)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+
+      - name: Lint Dockerfile (frontend)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+
+      - name: Check shell script syntax
+        run: bash -n Start_project.sh
+
+      - name: Verify .gitignore protects secrets
+        run: |
+          if git ls-files | grep -q "db_password.txt"; then
+            echo "ERROR: db_password.txt is tracked by git"
+            exit 1
+          fi
+          echo "OK: No secrets tracked"
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: lint-and-validate
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          tags: backend-secure:v1
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: false
+          tags: frontend-secure:v1
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Check image sizes
+        run: |
+          docker images --format "{{.Repository}}:{{.Tag}}  {{.Size}}" | grep -E "backend|frontend"
+          BACKEND_SIZE=$(docker image inspect backend-secure:v1 \
+            --format='{{.Size}}' 2>/dev/null || echo 0)
+          # Fail if backend image exceeds 200MB (200 * 1024 * 1024)
+          if [ "$BACKEND_SIZE" -gt 209715200 ]; then
+            echo "ERROR: Backend image too large ($BACKEND_SIZE bytes)"
+            exit 1
+          fi
+          echo "OK: Image sizes acceptable"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build backend for scanning
+        run: docker build -t backend-secure:v1 ./backend
+
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: backend-secure:v1
+          format: table
+          exit-code: 0          # report but don't fail on CVEs (beginner-friendly)
+          severity: CRITICAL,HIGH
+
+      - name: Build frontend for scanning
+        run: docker build -t frontend-secure:v1 ./frontend
+
+      - name: Scan frontend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: frontend-secure:v1
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
