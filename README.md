@@ -1,9 +1,36 @@
 # 🌐 NetOps Monitor
 
-> A containerized **Network Operations Center (NOC) Dashboard** — a Docker security course project.
-> Demonstrates production-grade Docker practices applied to a real-world telecom scenario.
+<p align="center">
+  <a href="https://www.docker.com/" target="_blank">
+    <img src="https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white"/>
+  </a>
+  <a href="https://docs.docker.com/compose/" target="_blank">
+    <img src="https://img.shields.io/badge/Docker_Compose-1E90FF?style=flat&logo=docker&logoColor=white"/>
+  </a>
+  <a href="https://developer.hashicorp.com/vault" target="_blank">
+    <img src="https://img.shields.io/badge/Vault-000000?style=flat&logo=vault&logoColor=white"/>
+  </a>
+  <a href="https://flask.palletsprojects.com/" target="_blank">
+    <img src="https://img.shields.io/badge/Flask-000000?style=flat&logo=flask&logoColor=white"/>
+  </a>
+  <a href="https://nginx.org/" target="_blank">
+    <img src="https://img.shields.io/badge/nginx-009639?style=flat&logo=nginx&logoColor=white"/>
+  </a>
+  <a href="https://mariadb.org/" target="_blank">
+    <img src="https://img.shields.io/badge/MariaDB-003545?style=flat&logo=mariadb&logoColor=white"/>
+  </a>
+  <a href="https://alpinelinux.org/" target="_blank">
+    <img src="https://img.shields.io/badge/Alpine_Linux-0D597F?style=flat&logo=alpinelinux&logoColor=white"/>
+  </a>
+  <a href="https://www.gnu.org/software/bash/" target="_blank">
+    <img src="https://img.shields.io/badge/Bash-121011?style=flat&logo=gnu-bash&logoColor=white"/>
+  </a>
+</p>
 
----
+
+> 💡 A containerized **Network Operations Center (NOC) Dashboard** built with secure Docker practices.  
+> Designed to simulate **real-world telecom infrastructure monitoring**.
+
 
 ## 📸 What It Does
 
@@ -135,6 +162,13 @@ The simulated network covers Egyptian mobile infrastructure nodes:
 ## 🛠️ Tech Stack
 
 `Docker` · `Docker Compose` · `HashiCorp Vault` · `Python / Flask` · `nginx` · `MariaDB` · `Alpine Linux` · `Bash`
+
+---
+## 👥 Team Members
+
+- Tasneem Amin  
+- Eman Tarek 
+- Mohamed Salah   
 
 ---
 
