@@ -115,7 +115,7 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 **Requirements:** Docker Engine, Docker Compose V2, `curl`, Rocky Linux / RHEL / CentOS
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/netops-monitor
+git clone https://github.com/TasneemAmen/netops-monitor
 cd netops-monitor
 chmod +x Start_project.sh
 ./Start_project.sh
