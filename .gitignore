@@ -1,12 +1,16 @@
-# Generated at runtime — never commit
-db_password.txt
+# Generated at runtime - never commit
 bootstrap.log
 .compose.run.yml
 .compose.nginx.yml
 docker-compose.override.yml
+.secrets/
+*.pem
+*.key
 
-# Persistent DB volume (local dev only)
+# Persistent local data
 db/data/
+vault/data/
+vault/file/
 
 # Editor
 .vscode/

@@ -41,7 +41,52 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 - 📊 Load indicators & performance metrics  
 - ⏱️ Network uptime visualization  
 
-🔐 All secrets are securely managed using **HashiCorp Vault** — no `.env`, no plain variables.
+🔐 The backend does **not** use a hardcoded database password or `.env` file.  
+Instead, it authenticates to **HashiCorp Vault** using AppRole, then Vault generates temporary MariaDB credentials at runtime.
+
+---
+
+## 🔑 How Vault Is Applied
+
+In real production, applications should not store database passwords inside source code, Docker Compose files, or `.env` files.
+
+This project demonstrates the core production Vault flow:
+
+```text
+Backend App → AppRole Login → Vault Policy Check → Dynamic DB Credentials → MariaDB
+```
+
+### Vault Flow
+
+1. **Vault runs as a separate service**
+   - Vault is not part of the backend code.
+   - The backend connects to Vault over HTTP inside the Docker network.
+
+2. **Backend authenticates with AppRole**
+   - The backend receives `role_id` and `secret_id` as Docker secret files.
+   - The backend uses them to log in to Vault.
+
+3. **Vault checks policy**
+   - The backend is only allowed to read:
+
+     ```text
+     database/creds/netops-readonly
+     ```
+
+4. **Vault generates database credentials**
+   - Vault creates a temporary MariaDB username and password.
+   - The generated DB user has limited `SELECT` permission on the `netops` database.
+
+5. **Backend connects to MariaDB**
+   - The backend uses the temporary credentials in memory.
+   - No permanent DB password is stored in the application.
+
+The backend never uses:
+
+- ❌ Vault root token
+- ❌ hardcoded database password
+- ❌ `.env` file for secrets
+- ❌ MariaDB root user
 
 ---
 
@@ -51,9 +96,9 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 |---|-------------|----------------|
 | 1 | **Image size** | Alpine-based images (`python:3.11-alpine`, `nginx:alpine`), `--no-cache-dir` pip |
 | 2 | **Image security** | Non-root user `appuser`, minimal layers, no dev tools in final image |
-| 3 | **Compose security** | `read_only: true`, `no-new-privileges: true`, `tmpfs` for write-only paths |
-| 4 | **Secrets via Vault** | HashiCorp Vault KV store — password injected as Docker secret at runtime |
-| 5 | **Local registry** | All images built, tagged, and pulled from `localhost:5000` (never Docker Hub) |
+| 3 | **Compose security** | `read_only: true`, `no-new-privileges: true`, Docker secrets |
+| 4 | **Secrets via Vault** | Vault AppRole + database secrets engine generates short-lived DB credentials |
+| 5 | **Local registry** | Images built, tagged, and pulled from `localhost:5000` |
 | + | **DB healthcheck** | Backend waits for MariaDB `service_healthy` before starting |
 | + | **Automated bootstrap** | Single script handles Vault, registry, build, push, deploy, and validation |
 
@@ -61,15 +106,15 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 
 ## 🏗️ Architecture
 
-```
+```text
  ┌───────────────────────────────────────────────────────┐
  │                      Host Machine                     │
  │                                                       │
  │  ┌──────────┐   ┌──────────┐                         │
- │  │ Registry │   │  Vault   │  (standalone containers) │
+ │  │ Registry │   │  Vault   │  (standalone services)   │
  │  │  :5000   │   │  :8200   │                         │
  │  └──────────┘   └────┬─────┘                         │
- │                       │ secret/db                     │
+ │                       │ AppRole + Dynamic DB Creds    │
  │  ┌────────────────────▼──────────────────────────┐   │
  │  │          docker-compose stack                  │   │
  │  │                                                │   │
@@ -88,13 +133,18 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 
 | Feature | Detail |
 |---------|--------|
-| No secrets in env vars | DB password stored in Vault, retrieved at boot, mounted as Docker secret |
-| Read-only containers | `read_only: true` on frontend and backend — filesystem cannot be modified at runtime |
-| tmpfs for nginx | `/var/cache/nginx`, `/var/run`, `/tmp` mounted as tmpfs (in-memory, not disk) |
-| Non-root user | Backend runs as `appuser` (UID > 0); nginx runs as `nginx` |
-| No privilege escalation | `no-new-privileges: true` on all services |
-| Local registry isolation | Images never leave the machine; all pulls from `localhost:5000` |
-| DB healthcheck | Compose waits for MariaDB `innodb_initialized` before starting backend |
+| No app DB password | Backend asks Vault for temporary MariaDB credentials |
+| No `.env` secrets | Secrets are not stored in `.env` files |
+| AppRole authentication | Backend authenticates to Vault using mounted AppRole secret files |
+| Least privilege policy | Backend can only read `database/creds/netops-readonly` |
+| Dynamic DB users | Vault creates short-lived MariaDB users with limited permissions |
+| No Vault root token in app | Root token is used only during Vault bootstrap/admin setup |
+| Docker secrets | AppRole values and MariaDB bootstrap password are mounted as secret files |
+| Read-only containers | `read_only: true` on frontend and backend |
+| Non-root user | Backend runs as `appuser` |
+| No privilege escalation | `no-new-privileges: true` on app services |
+| Local registry isolation | App images are built and pulled from `localhost:5000` |
+| DB healthcheck | Compose waits for MariaDB initialization before starting backend |
 
 ---
 
@@ -103,16 +153,16 @@ NetOps Monitor simulates a live NOC environment used in mobile telecom networks.
 | Service | Image | Port | Role |
 |---------|-------|------|------|
 | `frontend` | `nginx:alpine` | 8080 | NOC dashboard |
-| `backend` | `python:3.11-alpine` | 5001 | REST API |
-| `db` | `mariadb:10.6` | — (internal) | Network element data |
-| `vault` | `hashicorp/vault` | 8200 | Secrets management |
+| `backend` | `python:3.11-alpine` | 5001 | Flask REST API |
+| `db` | `mariadb:10.6` | internal | Network element data |
+| `vault` | `hashicorp/vault:1.19` | 127.0.0.1:8200 | Secrets management |
 | `registry` | `registry:2` | 5000 | Local image registry |
 
 ---
 
 ## 🚀 Quick Start
 
-**Requirements:** Docker Engine, Docker Compose V2, `curl`, Rocky Linux / RHEL / CentOS
+**Requirements:** Docker Engine, Docker Compose V2, Bash-compatible shell, `curl`, `sed`, `awk`, `grep`
 
 ```bash
 git clone https://github.com/TasneemAmen/netops-monitor
@@ -121,26 +171,39 @@ chmod +x Start_project.sh
 ./Start_project.sh
 ```
 
-Open **http://localhost:8080** to view the dashboard.
-Open **http://localhost:8200** (token: `root`) to explore Vault.
+Open:
+
+- **Dashboard:** http://localhost:8080
+- **API:** http://localhost:5001
+- **Vault UI:** http://127.0.0.1:8200
+
+The Vault root token is saved locally in:
+
+```text
+.secrets/vault_root_token
+```
+
+It is used only for Vault administration/bootstrap, not by the backend application.
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 netops-monitor/
 ├── backend/
-│   ├── app.py              # Flask REST API — /api/nodes, /api/alarms, /api/stats
-│   ├── Dockerfile          # python:3.11-alpine, non-root, minimal
-│   └── requirements.txt    # flask, flask-cors, mysql-connector-python
+│   ├── app.py              # Flask API + Vault dynamic credential logic
+│   ├── Dockerfile          # python:3.11-alpine, non-root appuser
+│   └── requirements.txt    # flask, flask-cors, mysql-connector-python, requests
 ├── frontend/
 │   ├── index.html          # NOC dashboard — dark theme, auto-refresh
-│   └── Dockerfile          # nginx:alpine, single COPY layer
+│   └── Dockerfile          # nginx:alpine
 ├── db/
-│   └── init.sql            # Schema + telecom seed data (BTS, BSC, MSC, GGSN, HLR, SGSN)
-├── docker-compose.yml      # Secure service definitions
-├── get_secret.sh           # Pulls DB password from Vault → db_password.txt
+│   └── init.sql            # Schema + telecom seed data
+├── vault/
+│   └── config/
+│       └── vault.hcl       # Vault server configuration
+├── docker-compose.yml      # Service definitions and Docker secrets
 └── Start_project.sh        # Full bootstrap: Vault → Registry → Build → Deploy → Validate
 ```
 
@@ -161,6 +224,24 @@ The simulated network covers Egyptian mobile infrastructure nodes:
 
 ---
 
+## 🏭 Production Notes
+
+This project keeps Vault simple for learning, but the pattern is production-style.
+
+In real production, Vault should also use:
+
+- TLS
+- audit logging
+- cloud KMS/HSM auto-unseal
+- restricted network access
+- external identity integration
+- monitored secret rotation and revocation
+
+The main production concept is already demonstrated here:  
+**the app authenticates to Vault and receives short-lived database credentials instead of storing a permanent password.**
+
+---
+
 ## 🛠️ Tech Stack
 
 `Docker` · `Docker Compose` · `HashiCorp Vault` · `Python / Flask` · `nginx` · `MariaDB` · `Alpine Linux` · `Bash`
@@ -173,4 +254,5 @@ The simulated network covers Egyptian mobile infrastructure nodes:
 - Mohamed Salah   
 
 ---
+
 
